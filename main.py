@@ -6,12 +6,10 @@ import sys
 pygame.init()
 pygame.mixer.init()
 
-def get_resource_path(relative_path):
-    try:
-        base_path=sys._MEIPASS
-    except Exception:
-        base_path=os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
+font=pygame.font.SysFont('Arial', 50)
+def draw_text(text,font,color,x,y):
+    img=font.render(text, True, color)
+    screen.blit(img, (x, y))
 screen = pygame.display.set_mode((1500, 850))
 is_fullscreen=False
 pygame.display.set_caption("Shooting Star")
@@ -19,7 +17,8 @@ clock=pygame.time.Clock()
 #Starry background
 stars=[]
 planet_count=1
-
+black_screen=pygame.Surface((1500,850),pygame.SRCALPHA)
+darkness=255
 for i in range(1000):
     stars.append((random.randint(0,1500),random.randint(0,850),random.randint(1,2),(random.randint(125,255),random.randint(125,255),random.randint(125,255))))
 
@@ -125,6 +124,7 @@ dragging=False
 planets=[]
 planets_pos=set()
 level=1
+lives=3
 completed=False
 while len(planets)<planet_count:
     valid=True
@@ -151,6 +151,9 @@ while running:
                     screen = pygame.display.set_mode((1500, 850), pygame.FULLSCREEN|pygame.SCALED)
                 else:
                     screen = pygame.display.set_mode((1500, 850))
+            if event.key==pygame.K_SPACE:
+                player.velocity=pygame.Vector2(0,0)
+                player.tail_end=player.pos
         elif event.type==pygame.MOUSEBUTTONDOWN and event.button==1:
             if player.pos.distance_to(event.pos)<player.radius*2:
                 dragging=True
@@ -163,12 +166,21 @@ while running:
     for planet in planets:
         if player.pos.distance_to(planet.pos)<(player.radius+planet.radius)*1.5:
             reset()
+            lives-=1
+            darkness=200
+    if player.pos.x>1600 or player.pos.x<-100 or player.pos.y>950 or player.pos.y<-100:
+        reset()
+        lives-=1
+        darkness=200
     if player.pos.distance_to(goal.pos)<(player.radius+goal.radius)*2 and not completed:
         level+=1
         completed=True
         if planet_count<3:
             planet_count+=1
         shuffle()
+        darkness=255
+    if lives<=0:
+        running=False
 
 
     #Rendering
@@ -185,5 +197,17 @@ while running:
         pygame.draw.circle(screen,(200,200,200),cursor,10)
         if cursor.distance_to(player.pos)>=0:
             player.tail_end=cursor
+
+    black_screen.fill((0,0,0,darkness))
+    screen.blit(black_screen,(0,0))
+    if darkness>=0:
+        darkness-=dt*50
+        if darkness>150:
+            draw_text(f'Level {level}',font,(255,255,255),300,350)
+            draw_text(f'Lives: {lives}',font,(255,255,255),300,400)
+            draw_text(f'Drag and release the blue shooting star to shoot',font,(255,255,255),550,100)
+            draw_text(f'Press space to stop your star',font,(255,255,255),550,200)
+            draw_text(f'Reach the green star without touching any planet',font,(255,255,255),550,300)
+            draw_text(f'Press F to toggle fullscreen',font,(255,255,255),550,400)
     pygame.display.flip() 
 pygame.quit()
