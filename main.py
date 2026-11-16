@@ -17,6 +17,7 @@ clock=pygame.time.Clock()
 #Starry background
 stars=[]
 planet_count=1
+GRAVITY=100
 black_screen=pygame.Surface((1500,850),pygame.SRCALPHA)
 darkness=255
 for i in range(1000):
@@ -50,6 +51,8 @@ class ShootingStar:
         screen.blit(glow_surf, glow_surf.get_rect(center=self.pos),special_flags=pygame.BLEND_RGBA_ADD)
         self.pos+=self.velocity*0.25
         self.tail_end+=self.velocity*0.2
+        if self.velocity!=(0,0):
+            self.velocity+=gravity_at(self.pos)
     def draw_tail(self,screen,start,end):
         for i in range(self.tail_steps):
             t=i/self.tail_steps
@@ -118,6 +121,14 @@ def reset():
     player.pos=pygame.Vector2(200,random.randint(200,650))
     player.velocity=pygame.Vector2(0,0)
     player.tail_end=player.pos
+def gravity_at(p):
+    a=pygame.Vector2(0,0)
+    for planet in planets:
+        d=planet.pos-p
+        distance=max(d.length(),20)
+        strength=GRAVITY*planet.radius/(distance**2)
+        a+=d/distance*strength
+    return a
 goal=Goal()
 player=ShootingStar()
 dragging=False
@@ -175,7 +186,7 @@ while running:
     if player.pos.distance_to(goal.pos)<(player.radius+goal.radius)*2 and not completed:
         level+=1
         completed=True
-        if planet_count<3:
+        if planet_count<4:
             planet_count+=1
         shuffle()
         darkness=255
