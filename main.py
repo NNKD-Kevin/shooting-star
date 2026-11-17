@@ -17,7 +17,7 @@ pygame.display.set_caption("Shooting Star")
 clock=pygame.time.Clock()
 #Starry background
 stars=[]
-planet_count=1
+planet_count=0
 GRAVITY=9.81
 black_screen=pygame.Surface((1500,850),pygame.SRCALPHA)
 darkness=255
@@ -98,6 +98,35 @@ class ShootingStar:
             glow=get_glow(self.glow_cache,self.color,radius*1.5)
             rect=glow.get_rect(center=points[idx])
             screen.blit(glow, rect, special_flags=pygame.BLEND_RGBA_ADD)
+class Meteor:
+    def __init__(self):
+        self.pos=pygame.Vector2(random.randint(0,1500),0)
+        self.speed=100
+        self.color=(random.randint(10,80),random.randint(10,80),random.randint(10,80))
+        self.radius=5
+        self.velocity=pygame.Vector2(20,0).rotate(random.randint(10,170))
+        self.trail_len=100
+        self.tail_steps=100
+        self.tail_end=self.pos
+        self.trail=deque(maxlen=self.trail_len)
+        self.glow_cache={}
+    def draw(self,screen):
+        glow_surf=get_glow(self.glow_cache,self.color,self.radius*3)
+        screen.blit(glow_surf, glow_surf.get_rect(center=self.pos),special_flags=pygame.BLEND_RGBA_ADD)
+        self.pos+=self.velocity*0.25
+        self.velocity+=gravity_at(self.pos)
+        self.trail.append(self.pos.copy())
+    def draw_trail(self,screen):
+        points=list(self.trail)
+        n=len(points)
+        if n<2:
+            return
+        for idx in range(n-1):
+            radius=self.radius*(idx/(n-1))*1.6+2
+            glow=get_glow(self.glow_cache,self.color,radius*1.5)
+            rect=glow.get_rect(center=points[idx])
+            screen.blit(glow, rect, special_flags=pygame.BLEND_RGBA_ADD)
+
 
 class Planet:
     def __init__(self,pos):        
@@ -175,16 +204,16 @@ class WhiteHole:
             pygame.draw.circle(screen,(255,255,255),pos,self.radius*2)
 def shuffle():
     valid_white=False
-    global stars, planets, planets_pos,completed
+    global stars, planets, planets_pos,completed, meteors
     stars=[]
     for i in range(random.randint(200,1200)):
         stars.append((random.randint(0,1500),random.randint(0,850),random.randint(1,2),(random.randint(125,255),random.randint(125,255),random.randint(125,255))))
     planets=[]
     planets_pos=set()
-    x,y=random.randint(400,1300),random.randint(100,750)
+    x,y=random.randint(400,1100),random.randint(100,750)
     planets_pos.add((x,y))
     blackhole.pos=pygame.Vector2(x,y)
-    x,y=random.randint(400,1300),random.randint(100,750)
+    x,y=random.randint(600,1300),random.randint(100,750)
     while not valid_white:
         if math.hypot(x-blackhole.pos.x,y-blackhole.pos.y)<200:
             x,y=random.randint(400,1300),random.randint(100,750)
@@ -205,6 +234,7 @@ def shuffle():
     goal.pos=pygame.Vector2(1400,random.randint(200,650))
     completed=False
     player.reset()
+    meteors=[]
 class Particle:
     def __init__(self,pos,velocity,color):
         self.pos=pygame.Vector2(pos.x,pos.y)
@@ -225,14 +255,15 @@ def gravity_at(p):
         distance=max(d.length(),20)
         strength=GRAVITY*planet.radius**2/(distance**2)
         a+=d/distance*strength
-    black=blackhole.pos-p
-    distance=max(black.length(),20)
-    strength=GRAVITY*blackhole.radius**4/(distance**2)*0.002
-    a+=black/distance*strength
-    white=whitehole.pos-p
-    distance=max(white.length(),20)
-    strength=GRAVITY*whitehole.radius**2/(distance**2)*0.5
-    a-=white/distance*strength
+    if level>4:
+        black=blackhole.pos-p
+        distance=max(black.length(),20)
+        strength=GRAVITY*blackhole.radius**4/(distance**2)*0.002
+        a+=black/distance*strength
+        white=whitehole.pos-p
+        distance=max(white.length(),20)
+        strength=GRAVITY*whitehole.radius**2/(distance**2)*0.5
+        a-=white/distance*strength
     return a
 goal=Goal()
 blackhole=BlackHole()
@@ -245,9 +276,11 @@ level=1
 lives=3
 completed=False
 collision_timer=1.5
+meteor_spawn_timer=5
 collided=False
 shuffle()
 running=True
+meteors=[]
 while running:
     #Input
     dt=clock.tick(60)/1000
@@ -274,8 +307,13 @@ while running:
                 for i in range(player.trail_len):
                     player.trail.append(cursor.lerp(player.pos,i/player.trail_len))
                 player.launched=True
-                
+
     #Logic
+    if level>6:
+        meteor_spawn_timer-=dt
+    if meteor_spawn_timer<=0:
+        meteor_spawn_timer=max(3,10-level/3)
+        meteors.append(Meteor())
     for planet in planets:
         if player.pos.distance_to(planet.pos)<(player.radius+planet.radius)*1.5:
             collision_timer-=dt
@@ -309,8 +347,28 @@ while running:
         planet_count=1
         lives=3
         shuffle()
-    if player.pos.distance_to(blackhole.pos)<(player.radius+blackhole.radius)*2:
+    if player.pos.distance_to(blackhole.pos)<(player.radius+blackhole.radius)*2 and level>4:
         player.pos.x,player.pos.y=whitehole.pos.x,whitehole.pos.y
+    for meteor in meteors:
+        if meteor.pos.distance_to(blackhole.pos)<(meteor.radius+blackhole.radius)*2:
+            meteor.pos.x,meteor.pos.y=whitehole.pos.x,whitehole.pos.y
+        for planet in planets:
+            if meteor.pos.distance_to(planet.pos)<(meteor.radius+planet.radius)*2:
+                for i in range(5):
+                    velocity=meteor.velocity.rotate(random.uniform(-360,360))
+                    color=(planet.color[0]+200,planet.color[1]+200,planet.color[2]+200)
+                    particles.append(Particle(meteor.pos,velocity,color))
+                meteors.remove(meteor)
+        if meteor.pos.distance_to(player.pos)<(meteor.radius+player.radius)*2:
+            reset()
+            lives-=1
+            darkness=200
+            for i in range(5):
+                velocity=meteor.velocity.rotate(random.uniform(-360,360))
+                particles.append(Particle(meteor.pos,velocity,meteor.color))
+            meteors.remove(meteor)
+        if meteor.pos.x<-100 or meteor.pos.x>1600 or meteor.pos.y<-100 or meteor.pos.y>900:
+            meteors.remove(meteor)
 
 
     #Rendering
@@ -319,10 +377,14 @@ while running:
         pygame.draw.circle(screen,color,(x,y),r)
     for planet in planets:
         planet.draw(screen,planet.pos,planet.pos)
-    blackhole.draw(screen,blackhole.pos,blackhole.pos)
-    whitehole.draw(screen,whitehole.pos,whitehole.pos)
+    if level>4:
+        blackhole.draw(screen,blackhole.pos,blackhole.pos)
+        whitehole.draw(screen,whitehole.pos,whitehole.pos)
     player.draw(screen)
     player.draw_trail(screen)
+    for meteor in meteors:
+        meteor.draw(screen)
+        meteor.draw_trail(screen)
     goal.draw(screen,goal.pos,goal.pos)
     if dragging:
         cursor=pygame.Vector2(pygame.mouse.get_pos())
