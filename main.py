@@ -205,6 +205,17 @@ def shuffle():
     goal.pos=pygame.Vector2(1400,random.randint(200,650))
     completed=False
     player.reset()
+class Particle:
+    def __init__(self,pos,velocity,color):
+        self.pos=pygame.Vector2(pos.x,pos.y)
+        self.velocity=pygame.Vector2(velocity.x,velocity.y)
+        self.color=color
+        self.radius=20
+    def draw(self,screen):
+        pygame.draw.circle(screen,self.color,self.pos,self.radius)
+        self.pos+=self.velocity*0.2
+        self.radius-=1
+particles=[]
 def reset():
     player.reset()
 def gravity_at(p):
@@ -233,6 +244,8 @@ planets_pos=set()
 level=1
 lives=3
 completed=False
+collision_timer=1.5
+collided=False
 shuffle()
 running=True
 while running:
@@ -265,9 +278,20 @@ while running:
     #Logic
     for planet in planets:
         if player.pos.distance_to(planet.pos)<(player.radius+planet.radius)*1.5:
-            reset()
-            lives-=1
-            darkness=200
+            collision_timer-=dt
+            collided=True
+            if collided:
+                for i in range(15):
+                    velocity=player.velocity.rotate(random.uniform(-360,360))
+                    color=(planet.color[0]+200,planet.color[1]+200,planet.color[2]+200)
+                    particles.append(Particle(player.pos,velocity,color))
+                collided=False
+            player.stop()
+            if collision_timer<=0:
+                reset()
+                lives-=1
+                darkness=200
+                collision_timer=1.5
     if player.pos.x>1500 or player.pos.x<0 or player.pos.y>850 or player.pos.y<0:
         reset()
         lives-=1
@@ -308,7 +332,11 @@ while running:
             player.tail_end=cursor
     if not player.launched:
         player.draw_tail(screen,player.pos,player.tail_end)        
-
+    for particle in particles:
+        if particle.radius>0:
+            particle.draw(screen)
+        else:
+            particles.remove(particle)
     black_screen.fill((0,0,0,darkness))
     screen.blit(black_screen,(0,0))
     if darkness>=0:
