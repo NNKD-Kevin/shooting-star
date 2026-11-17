@@ -21,9 +21,6 @@ planet_count=1
 GRAVITY=9.81
 black_screen=pygame.Surface((1500,850),pygame.SRCALPHA)
 darkness=255
-for i in range(1000):
-    stars.append((random.randint(0,1500),random.randint(0,850),random.randint(1,2),(random.randint(125,255),random.randint(125,255),random.randint(125,255))))
-
 def draw_glow(radius,color):
     size=radius*2
     surf = pygame.Surface((size, size), pygame.SRCALPHA)
@@ -32,10 +29,25 @@ def draw_glow(radius,color):
         alpha = int(255 * falloff)
         pygame.draw.circle(surf, (*color, alpha),(radius, radius), r)
     return surf
-def get_glow(pos,glow_cache,color,radius):
+def draw_glow_rings(radius,color):
+    w, h = radius * 8, radius * 2               
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    for r in range(radius, 0, -2):
+        k = r / radius                           
+        c = tuple(int(ch * (1 - k) ** 2) for ch in color)   
+        rect = pygame.Rect(0, 0, int(w * k), int(h * k))
+        rect.center = (w // 2, h // 2)
+        pygame.draw.ellipse(surf, (*c, 255), rect)
+    return surf
+def get_glow(glow_cache,color,radius):
     radius=max(1,int(radius))
     if radius not in glow_cache:
         glow_cache[radius]=draw_glow(radius,color)
+    return glow_cache[radius]
+def get_glow_rings(glow_cache,color,radius):
+    radius=max(1,int(radius))
+    if radius not in glow_cache:
+        glow_cache[radius]=draw_glow_rings(radius,color)
     return glow_cache[radius]
 class ShootingStar:
     def __init__(self):
@@ -51,7 +63,7 @@ class ShootingStar:
         self.glow_cache={}
         self.launched=False
     def draw(self,screen):
-        glow_surf=get_glow(self.pos,self.glow_cache,self.color,self.radius*3)
+        glow_surf=get_glow(self.glow_cache,self.color,self.radius*3)
         screen.blit(glow_surf, glow_surf.get_rect(center=self.pos),special_flags=pygame.BLEND_RGBA_ADD)
         self.pos+=self.velocity*0.25
         if self.launched:
@@ -73,7 +85,7 @@ class ShootingStar:
             t=i/self.tail_steps
             pos=start+(end-start)*t
             radius=self.radius*(1-t)*1.6+2
-            glow=get_glow(pos,self.glow_cache,self.color,radius*1.5)
+            glow=get_glow(self.glow_cache,self.color,radius*1.5)
             rect = glow.get_rect(center=pos)
             screen.blit(glow, rect, special_flags=pygame.BLEND_RGBA_ADD)
     def draw_trail(self,screen):
@@ -83,7 +95,7 @@ class ShootingStar:
             return
         for idx in range(n-1):
             radius=self.radius*(idx/(n-1))*1.6+2
-            glow=get_glow(points[idx],self.glow_cache,self.color,radius*1.5)
+            glow=get_glow(self.glow_cache,self.color,radius*1.5)
             rect=glow.get_rect(center=points[idx])
             screen.blit(glow, rect, special_flags=pygame.BLEND_RGBA_ADD)
 
@@ -101,7 +113,7 @@ class Planet:
                 t=i/self.tail_steps
                 pos=start+(end-start)*t
                 radius=self.radius*(1-t)*1.6+2
-                glow=get_glow(self.pos,self.glow_cache,self.color,radius*1.5)
+                glow=get_glow(self.glow_cache,self.color,radius*1.5)
                 rect = glow.get_rect(center=pos)
                 screen.blit(glow, rect, special_flags=pygame.BLEND_RGBA_ADD)
             for i in range(3):
@@ -118,16 +130,68 @@ class Goal:
             t=i/self.tail_steps
             pos=start+(end-start)*t
             radius=self.radius*(1-t)*1.6+2
-            glow=get_glow(self.pos,self.glow_cache,self.color,radius*1.5)
+            glow=get_glow(self.glow_cache,self.color,radius*1.5)
             rect = glow.get_rect(center=pos)
             screen.blit(glow, rect, special_flags=pygame.BLEND_RGBA_ADD)
+class BlackHole:
+    def __init__(self):        
+            self.pos=pygame.Vector2(500,random.randint(100,750))
+            self.color=(80,70,10)
+            self.radius=30
+            self.tail_steps=15
+            self.glow_cache={}
+            self.ring_cache={}
+    def draw(self,screen,start,end):
+        for i in range(self.tail_steps):
+            t=i/self.tail_steps
+            pos=start+(end-start)*t
+            radius=self.radius*(1-t)*1.6+2
+            glow=get_glow(self.glow_cache,self.color,radius*1.5)
+            ring=get_glow_rings(self.ring_cache,self.color,radius*1.5)
+            rect = glow.get_rect(center=pos)
+            ring_rect=ring.get_rect(center=pos)
+            screen.blit(glow, rect, special_flags=pygame.BLEND_RGBA_ADD)
+            screen.blit(ring, ring_rect, special_flags=pygame.BLEND_RGBA_ADD)
+            pygame.draw.circle(screen,(0,0,0),pos,self.radius*2)
+class WhiteHole:
+    def __init__(self):        
+            self.pos=pygame.Vector2(500,random.randint(100,750))
+            self.color=(10,70,80)
+            self.radius=30
+            self.tail_steps=15
+            self.glow_cache={}
+            self.ring_cache={}
+    def draw(self,screen,start,end):
+        for i in range(self.tail_steps):
+            t=i/self.tail_steps
+            pos=start+(end-start)*t
+            radius=self.radius*(1-t)*1.6+2
+            glow=get_glow(self.glow_cache,self.color,radius*1.5)
+            ring=get_glow_rings(self.ring_cache,self.color,radius*1.5)
+            rect = glow.get_rect(center=pos)
+            ring_rect=ring.get_rect(center=pos)
+            screen.blit(glow, rect, special_flags=pygame.BLEND_RGBA_ADD)
+            screen.blit(ring, ring_rect, special_flags=pygame.BLEND_RGBA_ADD)
+            pygame.draw.circle(screen,(255,255,255),pos,self.radius*2)
 def shuffle():
+    valid_white=False
     global stars, planets, planets_pos,completed
     stars=[]
     for i in range(random.randint(200,1200)):
         stars.append((random.randint(0,1500),random.randint(0,850),random.randint(1,2),(random.randint(125,255),random.randint(125,255),random.randint(125,255))))
     planets=[]
     planets_pos=set()
+    x,y=random.randint(400,1300),random.randint(100,750)
+    planets_pos.add((x,y))
+    blackhole.pos=pygame.Vector2(x,y)
+    x,y=random.randint(400,1300),random.randint(100,750)
+    while not valid_white:
+        if math.hypot(x-blackhole.pos.x,y-blackhole.pos.y)<200:
+            x,y=random.randint(400,1300),random.randint(100,750)
+        else:
+            valid_white=True
+    whitehole.pos=pygame.Vector2(x,y)
+    planets_pos.add((x,y))
     while len(planets)<planet_count:
         valid=True
         x=random.randint(400,1300)
@@ -150,8 +214,18 @@ def gravity_at(p):
         distance=max(d.length(),20)
         strength=GRAVITY*planet.radius**2/(distance**2)
         a+=d/distance*strength
+    black=blackhole.pos-p
+    distance=max(black.length(),20)
+    strength=GRAVITY*blackhole.radius**4/(distance**2)*0.002
+    a+=black/distance*strength
+    white=whitehole.pos-p
+    distance=max(white.length(),20)
+    strength=GRAVITY*whitehole.radius**2/(distance**2)*0.5
+    a-=white/distance*strength
     return a
 goal=Goal()
+blackhole=BlackHole()
+whitehole=WhiteHole()
 player=ShootingStar()
 dragging=False
 planets=[]
@@ -159,17 +233,7 @@ planets_pos=set()
 level=1
 lives=3
 completed=False
-while len(planets)<planet_count:
-    valid=True
-    x=random.randint(400,1300)
-    y=random.randint(100,750)
-    for px,py in planets_pos:
-        if math.hypot(x-px,y-py)<300:
-            valid=False
-    if valid:
-        planets_pos.add((x,y))
-        planets.append(Planet(pygame.Vector2(x,y)))
-
+shuffle()
 running=True
 while running:
     #Input
@@ -212,7 +276,7 @@ while running:
         level+=1
         lives=3
         completed=True
-        if planet_count<4:
+        if planet_count<3:
             planet_count+=1
         shuffle()
         darkness=255
@@ -221,6 +285,8 @@ while running:
         planet_count=1
         lives=3
         shuffle()
+    if player.pos.distance_to(blackhole.pos)<(player.radius+blackhole.radius)*2:
+        player.pos.x,player.pos.y=whitehole.pos.x,whitehole.pos.y
 
 
     #Rendering
@@ -229,6 +295,8 @@ while running:
         pygame.draw.circle(screen,color,(x,y),r)
     for planet in planets:
         planet.draw(screen,planet.pos,planet.pos)
+    blackhole.draw(screen,blackhole.pos,blackhole.pos)
+    whitehole.draw(screen,whitehole.pos,whitehole.pos)
     player.draw(screen)
     player.draw_trail(screen)
     goal.draw(screen,goal.pos,goal.pos)
