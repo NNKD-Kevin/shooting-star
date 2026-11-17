@@ -3,6 +3,7 @@ import random
 import math
 import os
 import sys
+from collections import deque
 pygame.init()
 pygame.mixer.init()
 
@@ -17,7 +18,7 @@ clock=pygame.time.Clock()
 #Starry background
 stars=[]
 planet_count=1
-GRAVITY=100
+GRAVITY=9.81
 black_screen=pygame.Surface((1500,850),pygame.SRCALPHA)
 darkness=255
 for i in range(1000):
@@ -31,7 +32,7 @@ def draw_glow(radius,color):
         alpha = int(255 * falloff)
         pygame.draw.circle(surf, (*color, alpha),(radius, radius), r)
     return surf
-def get_glow(glow_cache,color,radius):
+def get_glow(pos,glow_cache,color,radius):
     radius=max(1,int(radius))
     if radius not in glow_cache:
         glow_cache[radius]=draw_glow(radius,color)
@@ -43,24 +44,49 @@ class ShootingStar:
         self.color=(0,40,80)
         self.radius=7
         self.velocity=pygame.Vector2(0,0)
+        self.trail_len=100
         self.tail_steps=100
-        self.glow_cache={}
         self.tail_end=self.pos
+        self.trail=deque(maxlen=self.trail_len)
+        self.glow_cache={}
+        self.launched=False
     def draw(self,screen):
-        glow_surf=get_glow(self.glow_cache,self.color,self.radius*3)
+        glow_surf=get_glow(self.pos,self.glow_cache,self.color,self.radius*3)
         screen.blit(glow_surf, glow_surf.get_rect(center=self.pos),special_flags=pygame.BLEND_RGBA_ADD)
         self.pos+=self.velocity*0.25
-        self.tail_end+=self.velocity*0.2
-        if self.velocity!=(0,0):
+        if self.launched:
             self.velocity+=gravity_at(self.pos)
+            self.trail.append(self.pos.copy())
+            self.trail.popleft()
+    def stop(self):
+        self.velocity=pygame.Vector2(0,0)
+        self.tail_end=self.pos
+        self.launched=False
+    def reset(self):
+        self.pos=pygame.Vector2(200,random.randint(200,650))
+        self.velocity=pygame.Vector2(0,0)
+        self.tail_end=self.pos
+        self.launched=False
+        self.trail.clear()
     def draw_tail(self,screen,start,end):
         for i in range(self.tail_steps):
             t=i/self.tail_steps
             pos=start+(end-start)*t
             radius=self.radius*(1-t)*1.6+2
-            glow=get_glow(self.glow_cache,self.color,radius*1.5)
+            glow=get_glow(pos,self.glow_cache,self.color,radius*1.5)
             rect = glow.get_rect(center=pos)
             screen.blit(glow, rect, special_flags=pygame.BLEND_RGBA_ADD)
+    def draw_trail(self,screen):
+        points=list(self.trail)
+        n=len(points)
+        if n<2:
+            return
+        for idx in range(n-1):
+            radius=self.radius*(idx/(n-1))*1.6+2
+            glow=get_glow(points[idx],self.glow_cache,self.color,radius*1.5)
+            rect=glow.get_rect(center=points[idx])
+            screen.blit(glow, rect, special_flags=pygame.BLEND_RGBA_ADD)
+
 class Planet:
     def __init__(self,pos):        
         self.pos=pos
@@ -75,7 +101,7 @@ class Planet:
                 t=i/self.tail_steps
                 pos=start+(end-start)*t
                 radius=self.radius*(1-t)*1.6+2
-                glow=get_glow(self.glow_cache,self.color,radius*1.5)
+                glow=get_glow(self.pos,self.glow_cache,self.color,radius*1.5)
                 rect = glow.get_rect(center=pos)
                 screen.blit(glow, rect, special_flags=pygame.BLEND_RGBA_ADD)
             for i in range(3):
@@ -92,7 +118,7 @@ class Goal:
             t=i/self.tail_steps
             pos=start+(end-start)*t
             radius=self.radius*(1-t)*1.6+2
-            glow=get_glow(self.glow_cache,self.color,radius*1.5)
+            glow=get_glow(self.pos,self.glow_cache,self.color,radius*1.5)
             rect = glow.get_rect(center=pos)
             screen.blit(glow, rect, special_flags=pygame.BLEND_RGBA_ADD)
 def shuffle():
@@ -112,21 +138,17 @@ def shuffle():
         if valid:
             planets_pos.add((x,y))
             planets.append(Planet(pygame.Vector2(x,y)))
-    player.pos=pygame.Vector2(200,random.randint(200,650))
     goal.pos=pygame.Vector2(1400,random.randint(200,650))
-    player.velocity=pygame.Vector2(0,0)
-    player.tail_end=player.pos
     completed=False
+    player.reset()
 def reset():
-    player.pos=pygame.Vector2(200,random.randint(200,650))
-    player.velocity=pygame.Vector2(0,0)
-    player.tail_end=player.pos
+    player.reset()
 def gravity_at(p):
     a=pygame.Vector2(0,0)
     for planet in planets:
         d=planet.pos-p
         distance=max(d.length(),20)
-        strength=GRAVITY*planet.radius/(distance**2)
+        strength=GRAVITY*planet.radius**2/(distance**2)
         a+=d/distance*strength
     return a
 goal=Goal()
@@ -163,15 +185,18 @@ while running:
                 else:
                     screen = pygame.display.set_mode((1500, 850))
             if event.key==pygame.K_SPACE:
-                player.velocity=pygame.Vector2(0,0)
-                player.tail_end=player.pos
+                player.stop()
         elif event.type==pygame.MOUSEBUTTONDOWN and event.button==1:
             if player.pos.distance_to(event.pos)<player.radius*2:
                 dragging=True
         elif event.type==pygame.MOUSEBUTTONUP and event.button==1:
-            dragging=False
-            cursor=pygame.Vector2(pygame.mouse.get_pos())
-            player.velocity=(player.pos-cursor)*0.1
+            if dragging:
+                dragging=False
+                cursor=pygame.Vector2(pygame.mouse.get_pos())
+                player.velocity=(player.pos-cursor)*0.1
+                for i in range(player.trail_len):
+                    player.trail.append(cursor.lerp(player.pos,i/player.trail_len))
+                player.launched=True
                 
     #Logic
     for planet in planets:
@@ -179,19 +204,23 @@ while running:
             reset()
             lives-=1
             darkness=200
-    if player.pos.x>1600 or player.pos.x<-100 or player.pos.y>950 or player.pos.y<-100:
+    if player.pos.x>1500 or player.pos.x<0 or player.pos.y>850 or player.pos.y<0:
         reset()
         lives-=1
         darkness=200
     if player.pos.distance_to(goal.pos)<(player.radius+goal.radius)*2 and not completed:
         level+=1
+        lives=3
         completed=True
         if planet_count<4:
             planet_count+=1
         shuffle()
         darkness=255
     if lives<=0:
-        running=False
+        level=1
+        planet_count=1
+        lives=3
+        shuffle()
 
 
     #Rendering
@@ -201,13 +230,16 @@ while running:
     for planet in planets:
         planet.draw(screen,planet.pos,planet.pos)
     player.draw(screen)
-    player.draw_tail(screen,player.pos,player.tail_end)
+    player.draw_trail(screen)
     goal.draw(screen,goal.pos,goal.pos)
     if dragging:
         cursor=pygame.Vector2(pygame.mouse.get_pos())
         pygame.draw.circle(screen,(200,200,200),cursor,10)
+        player.draw_tail(screen,player.pos,player.tail_end)
         if cursor.distance_to(player.pos)>=0:
             player.tail_end=cursor
+    if not player.launched:
+        player.draw_tail(screen,player.pos,player.tail_end)        
 
     black_screen.fill((0,0,0,darkness))
     screen.blit(black_screen,(0,0))
