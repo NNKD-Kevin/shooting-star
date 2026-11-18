@@ -445,6 +445,7 @@ while running:
         player.draw_tail(screen,player.pos,player.tail_end)
         if cursor.distance_to(player.pos)>=0:
             player.tail_end=cursor
+        player.trail.clear()
     if not player.launched:
         player.draw_tail(screen,player.pos,player.tail_end)        
     for particle in particles:
